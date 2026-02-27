@@ -57,13 +57,14 @@ exports.login = async (req, res) => {
 
     const user = await User.findOne({ email }).select('+password');
 
+    // Mude esta linha:
     if (!user) {
-      return res.status(400).json({ message: 'Email ou senha incorretos' });
+      return res.status(404).json({ message: 'Usuário não encontrado' }); // ✅ Novo
     }
 
     const passwordMatch = await user.matchPassword(password);
     if (!passwordMatch) {
-      return res.status(400).json({ message: 'Email ou senha incorretos' });
+      return res.status(400).json({ message: 'Senha incorreta' }); // ✅ Modificado
     }
 
     const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
