@@ -8,6 +8,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Rota raiz da API
+app.get('/api', (req, res) => {
+  res.json({ message: 'API ConduzAuto funcionando!' });
+});
+
 // Rotas
 app.use('/api/auth', require('./routes/auth'));
 
