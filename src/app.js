@@ -15,6 +15,7 @@ app.get('/api', (req, res) => {
 
 // Rotas
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/instructor', require('./routes/instructor'));
 
 // Rota de teste
 app.get('/api/health', (req, res) => {
