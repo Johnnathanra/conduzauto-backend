@@ -57,14 +57,13 @@ exports.login = async (req, res) => {
 
     const user = await User.findOne({ email }).select('+password');
 
-    // Mude esta linha:
     if (!user) {
-      return res.status(404).json({ message: 'Usuário não encontrado' }); // ✅ Novo
+      return res.status(404).json({ message: 'Usuário não encontrado' });
     }
 
     const passwordMatch = await user.matchPassword(password);
     if (!passwordMatch) {
-      return res.status(400).json({ message: 'Senha incorreta' }); // ✅ Modificado
+      return res.status(400).json({ message: 'Senha incorreta' });
     }
 
     const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
@@ -87,20 +86,40 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: `Erro ao fazer login: ${error.message}` });
   }
 };
+
+// ✅ NOVA FUNÇÃO - Carregar perfil do usuário
+exports.getProfile = async (req, res) => {
+  try {
+    console.log('👤 [getProfile] Buscando usuário ID:', req.userId);
+    const user = await User.findById(req.userId).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuário não encontrado' });
+    }
+    
+    console.log('✅ [getProfile] Perfil encontrado:', user.name);
+    res.json(user);
+  } catch (err) {
+    console.error('❌ [getProfile] Erro:', err);
+    res.status(500).json({ message: 'Erro ao carregar perfil', error: err.message });
+  }
+};
+
 // Deletar conta do usuário
 exports.deleteAccount = async (req, res) => {
   try {
-    const userId = req.user.id;
+    console.log('🗑️ [deleteAccount] Deletando usuário:', req.userId);
     
-    const user = await User.findByIdAndDelete(userId);
+    const user = await User.findByIdAndDelete(req.userId);
     
     if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
 
+    console.log('✅ [deleteAccount] Usuário deletado com sucesso');
     res.status(200).json({ message: 'Conta deletada com sucesso!' });
   } catch (error) {
-    console.error('Erro ao deletar conta:', error);
+    console.error('❌ [deleteAccount] Erro ao deletar conta:', error);
     res.status(500).json({ message: `Erro ao deletar conta: ${error.message}` });
   }
 };
