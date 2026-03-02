@@ -7,9 +7,20 @@ const Instructor = require('../models/Instructor');
 
 // ✅ Função para obter URL do frontend conforme ambiente
 const getFrontendUrl = () => {
-  if (process.env.NODE_ENV === 'production') {
+  // Se estiver no Railway (detecção automática pela variável de ambiente)
+  if (process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_ENVIRONMENT) {
+    console.log('🚂 [Railway] Detectado ambiente Railway');
     return process.env.FRONTEND_URL_PRODUCTION || 'https://conduzauto-frontend.up.railway.app';
   }
+  
+  // Se NODE_ENV for production
+  if (process.env.NODE_ENV === 'production') {
+    console.log('🏭 [Production] Usando URL de produção');
+    return process.env.FRONTEND_URL_PRODUCTION || 'https://conduzauto-frontend.up.railway.app';
+  }
+  
+  // Senão, use local
+  console.log('💻 [Development] Usando URL local');
   return process.env.FRONTEND_URL_LOCAL || 'http://localhost:3000';
 };
 
