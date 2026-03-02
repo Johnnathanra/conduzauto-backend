@@ -138,7 +138,6 @@ router.post('/generate', authMiddleware, async (req, res) => {
     
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     
-    // ✅ USAR .create() em vez de new + .save()
     console.log('💾 [Invites] Criando convite no MongoDB...');
     const inviteData = {
       instructorId,
@@ -211,7 +210,7 @@ router.get('/my-invites', authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ REVOGAR convite
+// ✅ REVOGAR convite (individual)
 router.post('/revoke/:code', authMiddleware, async (req, res) => {
   try {
     const { code } = req.params;
@@ -241,5 +240,61 @@ router.post('/revoke/:code', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+// ✅ LIMPAR TODOS os convites (apenas instrutor autenticado)
+router.post('/clear-all', authMiddleware, async (req, res) => {
+  try {
+    const instructorId = req.user.id;
+    
+    console.log(`\n========================================`);
+    console.log(`🔴 [Invites] Iniciando limpeza de TODOS os convites`);
+    console.log(`Instrutor ID: ${instructorId}`);
+    console.log(`========================================\n`);
+    
+    if (!instructorId) {
+      console.log('❌ [Invites] instructorId vazio');
+      return res.status(400).json({ 
+        success: false,
+        message: 'instructorId não definido' 
+      });
+    }
 
+    // Encontrar convites antes de deletar
+    const invitesBeforeDelete = await Invite.find({ instructorId });
+    console.log(`📊 [Invites] Convites encontrados: ${invitesBeforeDelete.length}`);
+    
+    if (invitesBeforeDelete.length === 0) {
+      console.log('⚠️ [Invites] Nenhum convite para deletar');
+      return res.json({ 
+        success: true,
+        message: 'Nenhum convite para remover',
+        deletedCount: 0
+      });
+    }
+
+    // Deletar todos
+    const result = await Invite.deleteMany({ instructorId });
+    
+    console.log(`✅ [Invites] Resultado da deleção:`);
+    console.log(`   - Convites deletados: ${result.deletedCount}`);
+    console.log(`   - Confirmação: ${result.acknowledged}`);
+    console.log(`========================================\n`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Todos os convites foram removidos com sucesso',
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('❌ [Invites] Erro ao limpar convites:');
+    console.error('   Mensagem:', error.message);
+    console.error('   Stack:', error.stack);
+    console.log(`========================================\n`);
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Erro ao limpar convites: ' + error.message 
+    });
+  }
+});
+
+module.exports = router;
