@@ -5,6 +5,14 @@ const jwt = require('jsonwebtoken');
 const Invite = require('../models/Invite');
 const Instructor = require('../models/Instructor');
 
+// ✅ Função para obter URL do frontend conforme ambiente
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL_PRODUCTION || 'https://conduzauto-frontend.up.railway.app';
+  }
+  return process.env.FRONTEND_URL_LOCAL || 'http://localhost:3000';
+};
+
 // ✅ Middleware de autenticação CORRETO
 const authMiddleware = (req, res, next) => {
   try {
@@ -155,7 +163,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
     console.log('✅ [Invites] Convite criado com sucesso!');
     console.log('   Documento salvo:', createdInvite._id);
     
-    const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/join-instructor/${slug}/${code}`;
+    const inviteLink = `${getFrontendUrl()}/join-instructor/${slug}/${code}`;
     
     console.log('✅ [Invites] Convite gerado com sucesso:');
     console.log('   Link:', inviteLink);
@@ -191,7 +199,7 @@ router.get('/my-invites', authMiddleware, async (req, res) => {
     const formattedInvites = invites.map(inv => ({
       slug: inv.slug,
       code: inv.code,
-      link: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/join-instructor/${inv.slug}/${inv.code}`,
+      link: `${getFrontendUrl()}/join-instructor/${inv.slug}/${inv.code}`,
       isActive: inv.isActive,
       createdAt: inv.createdAt,
       expiresAt: inv.expiresAt,
