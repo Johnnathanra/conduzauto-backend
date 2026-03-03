@@ -7,10 +7,16 @@ const Instructor = require('../models/Instructor');
 const User = require('../models/User');
 const Evaluation = require('../models/Evaluation');
 
+// ✅ Função auxiliar para obter URL do frontend baseado no NODE_ENV
+const getFrontendUrl = () => {
+  return process.env.NODE_ENV === 'production'
+    ? process.env.FRONTEND_URL_PROD
+    : process.env.FRONTEND_URL_DEV || 'http://localhost:3000';
+};
+
 // ✅ Middleware de autenticação GERAL (aceita alunos E instrutores)
 const authenticateToken = (req, res, next) => {
-  console.log('🔐 [AUTH] Middleware executado');
-  console.log('🔐 [AUTH] Headers:', req.headers.authorization ? 'Presente' : 'Ausente');
+  console.log(`🔐 [AUTH] Middleware executado - Token: ${req.headers.authorization ? 'Presente' : 'Ausente'}`);
   
   const token = req.headers.authorization?.split(' ')[1];
   
@@ -19,20 +25,17 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ message: 'Token não fornecido' });
   }
   
-  console.log('🔐 [AUTH] Token encontrado, verificando...');
-  
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = typeof decoded.id === 'string' ? decoded.id : decoded.id.toString();
-    console.log('✅ [AUTH] Token válido, userId:', userId);
+    console.log(`✅ [AUTH] Token válido, userId: ${userId}`);
     
     req.userId = userId;
     req.instructorId = userId;
     
-    console.log('✅ [AUTH] Chamando next()');
     next();
   } catch (err) {
-    console.error('❌ [AUTH] Erro ao verificar token:', err.message);
+    console.error(`❌ [AUTH] Erro ao verificar token: ${err.message}`);
     return res.status(401).json({ message: 'Token inválido' });
   }
 };
@@ -41,10 +44,10 @@ const authenticateInstructor = authenticateToken;
 
 // ========== REGISTRO ==========
 router.post('/register', async (req, res) => {
-  console.log('📝 [REGISTER] Requisição recebida:', req.body);
+  console.log(`📝 [REGISTER] Requisição recebida`);
   try {
     const { name, email, password, confirmPassword, specialty, bio } = req.body;
-    console.log('✅ [REGISTER] Dados extraídos:', { name, email, specialty });
+    console.log(`✅ [REGISTER] Dados extraídos: ${name} | ${email}`);
 
     if (!name || !email || !password || !confirmPassword) {
       console.log('❌ [REGISTER] Campos obrigatórios faltando');
@@ -61,7 +64,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'A senha deve ter pelo menos 6 caracteres' });
     }
 
-    console.log('🔍 [REGISTER] Procurando instructor com email:', email);
+    console.log(`🔍 [REGISTER] Procurando instructor com email: ${email}`);
     const existingInstructor = await Instructor.findOne({ email });
     if (existingInstructor) {
       console.log('❌ [REGISTER] Email já cadastrado');
@@ -69,7 +72,7 @@ router.post('/register', async (req, res) => {
     }
 
     // ========== GERAR SLUG ÚNICO ==========
-    console.log('🔧 [REGISTER] Gerando slug para:', name);
+    console.log(`🔧 [REGISTER] Gerando slug para: ${name}`);
     const base = name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
     let slug = base;
     let counter = 1;
@@ -77,7 +80,7 @@ router.post('/register', async (req, res) => {
       slug = `${base}-${counter}`;
       counter++;
     }
-    console.log('✅ [REGISTER] Slug gerado:', slug);
+    console.log(`✅ [REGISTER] Slug gerado: ${slug}`);
 
     // ========== HASH PASSWORD ==========
     console.log('🔐 [REGISTER] Hasheando password...');
@@ -96,7 +99,7 @@ router.post('/register', async (req, res) => {
     });
 
     await instructor.save();
-    console.log('✅ [REGISTER] Instructor salvo:', instructor._id);
+    console.log(`✅ [REGISTER] Instructor salvo: ${instructor._id}`);
 
     const token = jwt.sign({ id: instructor._id.toString() }, process.env.JWT_SECRET, {
       expiresIn: '72h',
@@ -115,8 +118,7 @@ router.post('/register', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('❌ [REGISTER] ERRO:', error.message);
-    console.error('📋 Stack:', error.stack);
+    console.error(`❌ [REGISTER] ERRO: ${error.message}`);
     res.status(500).json({ message: 'Erro ao registrar instrutor', error: error.message });
   }
 });
@@ -145,7 +147,7 @@ router.post('/login', async (req, res) => {
       expiresIn: '72h',
     });
 
-    console.log('✅ [LOGIN] Login bem-sucedido:', instructor._id);
+    console.log(`✅ [LOGIN] Login bem-sucedido: ${instructor._id}`);
 
     res.json({
       success: true,
@@ -159,7 +161,7 @@ router.post('/login', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('❌ [LOGIN] Erro ao fazer login:', error);
+    console.error(`❌ [LOGIN] Erro ao fazer login: ${error.message}`);
     res.status(500).json({ message: 'Erro ao fazer login' });
   }
 });
@@ -179,7 +181,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
       slug: instructor.slug,
     });
   } catch (error) {
-    console.error('❌ [PROFILE] Erro ao buscar perfil:', error);
+    console.error(`❌ [PROFILE] Erro ao buscar perfil: ${error.message}`);
     res.status(500).json({ message: 'Erro ao buscar perfil' });
   }
 });
@@ -189,11 +191,10 @@ router.get('/search-students', authenticateToken, async (req, res) => {
   try {
     const { search } = req.query;
     
-    console.log('🔍 [SEARCH] Instrutor:', req.userId);
-    console.log('🔍 [SEARCH] Termo de busca:', search);
+    console.log(`🔍 [SEARCH] Instrutor: ${req.userId} | Termo: ${search || 'nenhum'}`);
 
     const totalUsers = await User.countDocuments();
-    console.log('📊 [SEARCH] Total de alunos no banco:', totalUsers);
+    console.log(`📊 [SEARCH] Total de alunos no banco: ${totalUsers}`);
 
     let query = {};
 
@@ -204,24 +205,17 @@ router.get('/search-students', authenticateToken, async (req, res) => {
           { email: { $regex: search.trim(), $options: 'i' } }
         ]
       };
-      console.log('🔍 [SEARCH] Query:', JSON.stringify(query));
-    } else {
-      console.log('🔍 [SEARCH] Sem termo de busca, retornando todos');
     }
 
     const students = await User.find(query)
       .select('name email level totalXP coursesCompleted hoursLearned')
       .lean();
 
-    console.log('✅ [SEARCH] Encontrados:', students.length, 'alunos');
+    console.log(`✅ [SEARCH] Encontrados: ${students.length} alunos`);
     
-    if (students.length > 0) {
-      console.log('✅ [SEARCH] Primeiros 3:', students.slice(0, 3));
-    }
-
     res.json(students);
   } catch (error) {
-    console.error('❌ [SEARCH] Erro ao pesquisar alunos:', error);
+    console.error(`❌ [SEARCH] Erro ao pesquisar alunos: ${error.message}`);
     res.status(500).json({ message: 'Erro ao pesquisar alunos', error: error.message });
   }
 });
@@ -235,16 +229,15 @@ router.post('/link-student', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'studentId é obrigatório' });
     }
 
-    console.log('🔗 [LINK] Vinculando aluno:', studentId);
-    console.log('🔗 [LINK] Ao instrutor:', req.userId);
+    console.log(`🔗 [LINK] Aluno: ${studentId} | Instrutor: ${req.userId}`);
 
     const student = await User.findById(studentId);
     if (!student) {
-      console.log('❌ [LINK] Aluno não encontrado com ID:', studentId);
+      console.log(`❌ [LINK] Aluno não encontrado: ${studentId}`);
       return res.status(404).json({ message: 'Aluno não encontrado' });
     }
 
-    console.log('✅ [LINK] Aluno encontrado:', student.name);
+    console.log(`✅ [LINK] Aluno encontrado: ${student.name}`);
 
     const instructor = await Instructor.findById(req.userId);
     if (!instructor) {
@@ -274,7 +267,7 @@ router.post('/link-student', authenticateToken, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [LINK] Erro ao vincular aluno:', error);
+    console.error(`❌ [LINK] Erro ao vincular aluno: ${error.message}`);
     res.status(500).json({ message: 'Erro ao vincular aluno', error: error.message });
   }
 });
@@ -288,7 +281,7 @@ router.post('/unlink-student', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'studentId é obrigatório' });
     }
 
-    console.log('🔓 [UNLINK] Desvinculando aluno:', studentId);
+    console.log(`🔓 [UNLINK] Desvinculando aluno: ${studentId}`);
 
     const instructor = await Instructor.findById(req.userId);
     if (!instructor) {
@@ -302,7 +295,7 @@ router.post('/unlink-student', authenticateToken, async (req, res) => {
     console.log('✅ [UNLINK] Aluno desvinculado com sucesso');
     res.json({ success: true, message: 'Aluno desvinculado com sucesso' });
   } catch (error) {
-    console.error('❌ [UNLINK] Erro ao desvincular aluno:', error);
+    console.error(`❌ [UNLINK] Erro ao desvincular aluno: ${error.message}`);
     res.status(500).json({ message: 'Erro ao desvincular aluno', error: error.message });
   }
 });
@@ -310,7 +303,7 @@ router.post('/unlink-student', authenticateToken, async (req, res) => {
 // ========== OBTER ALUNOS VINCULADOS DO INSTRUTOR ==========
 router.get('/my-students', authenticateToken, async (req, res) => {
   try {
-    console.log('👥 [MY-STUDENTS] Buscando alunos do instrutor:', req.userId);
+    console.log(`👥 [MY-STUDENTS] Buscando alunos do instrutor: ${req.userId}`);
     
     const instructor = await Instructor.findById(req.userId).populate(
       'studentsLinked', 
@@ -322,10 +315,10 @@ router.get('/my-students', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Instrutor não encontrado' });
     }
 
-    console.log('✅ [MY-STUDENTS] Encontrados:', instructor.studentsLinked.length, 'alunos');
+    console.log(`✅ [MY-STUDENTS] Encontrados: ${instructor.studentsLinked.length} alunos`);
     res.json(instructor.studentsLinked);
   } catch (error) {
-    console.error('❌ [MY-STUDENTS] Erro ao buscar alunos vinculados:', error);
+    console.error(`❌ [MY-STUDENTS] Erro ao buscar alunos vinculados: ${error.message}`);
     res.status(500).json({ message: 'Erro ao buscar alunos vinculados', error: error.message });
   }
 });
@@ -339,10 +332,10 @@ router.get('/students', authenticateToken, async (req, res) => {
       .select('name email level totalXP coursesCompleted hoursLearned')
       .lean();
     
-    console.log('✅ [STUDENTS] Total de alunos:', students.length);
+    console.log(`✅ [STUDENTS] Total de alunos: ${students.length}`);
     res.json(students);
   } catch (error) {
-    console.error('❌ [STUDENTS] Erro ao buscar alunos:', error);
+    console.error(`❌ [STUDENTS] Erro ao buscar alunos: ${error.message}`);
     res.status(500).json({ message: 'Erro ao buscar alunos', error: error.message });
   }
 });
@@ -356,7 +349,7 @@ router.get('/student/:studentId/evaluations', authenticateToken, async (req, res
     
     res.json(evaluations);
   } catch (error) {
-    console.error('❌ [EVALUATIONS] Erro ao buscar avaliações:', error);
+    console.error(`❌ [EVALUATIONS] Erro ao buscar avaliações: ${error.message}`);
     res.status(500).json({ message: 'Erro ao buscar avaliações' });
   }
 });
@@ -382,11 +375,11 @@ router.post('/evaluate', authenticateToken, async (req, res) => {
     });
 
     await evaluation.save();
-    console.log('✅ [EVALUATE] Avaliação criada para aluno:', studentId);
+    console.log(`✅ [EVALUATE] Avaliação criada para aluno: ${studentId}`);
     
     res.status(201).json({ success: true, evaluation });
   } catch (error) {
-    console.error('❌ [EVALUATE] Erro ao criar avaliação:', error);
+    console.error(`❌ [EVALUATE] Erro ao criar avaliação: ${error.message}`);
     res.status(500).json({ message: 'Erro ao criar avaliação' });
   }
 });
@@ -402,10 +395,10 @@ router.put('/evaluate/:evaluationId', authenticateToken, async (req, res) => {
       { new: true }
     );
 
-    console.log('✅ [UPDATE] Avaliação atualizada:', req.params.evaluationId);
+    console.log(`✅ [UPDATE] Avaliação atualizada: ${req.params.evaluationId}`);
     res.json({ success: true, evaluation });
   } catch (error) {
-    console.error('❌ [UPDATE] Erro ao atualizar avaliação:', error);
+    console.error(`❌ [UPDATE] Erro ao atualizar avaliação: ${error.message}`);
     res.status(500).json({ message: 'Erro ao atualizar avaliação' });
   }
 });
@@ -414,11 +407,11 @@ router.put('/evaluate/:evaluationId', authenticateToken, async (req, res) => {
 router.delete('/evaluate/:evaluationId', authenticateToken, async (req, res) => {
   try {
     await Evaluation.findByIdAndDelete(req.params.evaluationId);
-    console.log('✅ [DELETE] Avaliação deletada:', req.params.evaluationId);
+    console.log(`✅ [DELETE] Avaliação deletada: ${req.params.evaluationId}`);
     
     res.json({ success: true, message: 'Avaliação deletada' });
   } catch (error) {
-    console.error('❌ [DELETE] Erro ao deletar avaliação:', error);
+    console.error(`❌ [DELETE] Erro ao deletar avaliação: ${error.message}`);
     res.status(500).json({ message: 'Erro ao deletar avaliação' });
   }
 });
@@ -426,8 +419,7 @@ router.delete('/evaluate/:evaluationId', authenticateToken, async (req, res) => 
 // ========== GERAR CÓDIGO DE CONVITE ==========
 router.post('/generate-invitation', authenticateToken, async (req, res) => {
   try {
-    console.log('🎫 [GENERATE-INVITATION] Requisição recebida');
-    console.log('🎫 [GENERATE-INVITATION] req.userId:', req.userId);
+    console.log(`🎫 [GENERATE-INVITATION] Requisição - userId: ${req.userId}`);
     
     const instructorId = req.userId;
     
@@ -437,15 +429,15 @@ router.post('/generate-invitation', authenticateToken, async (req, res) => {
     }
 
     const code = crypto.randomBytes(16).toString('hex');
-    console.log('🎫 [GENERATE-INVITATION] Código gerado:', code);
+    console.log(`🎫 [GENERATE-INVITATION] Código gerado: ${code}`);
 
     const instructor = await Instructor.findById(instructorId);
     if (!instructor) {
-      console.log('❌ [GENERATE-INVITATION] Instrutor não encontrado com ID:', instructorId);
+      console.log(`❌ [GENERATE-INVITATION] Instrutor não encontrado: ${instructorId}`);
       return res.status(404).json({ error: 'Instrutor não encontrado' });
     }
 
-    console.log('✅ [GENERATE-INVITATION] Instrutor encontrado:', instructor.name);
+    console.log(`✅ [GENERATE-INVITATION] Instrutor encontrado: ${instructor.name}`);
 
     // ========== GERAR SLUG SE AUSENTE ==========
     if (!instructor.slug) {
@@ -458,10 +450,10 @@ router.post('/generate-invitation', authenticateToken, async (req, res) => {
         counter++;
       }
       instructor.slug = slug;
-      console.log('✅ [GENERATE-INVITATION] Slug gerado:', slug);
+      console.log(`✅ [GENERATE-INVITATION] Slug gerado: ${slug}`);
     }
 
-    console.log('✅ [GENERATE-INVITATION] Slug:', instructor.slug);
+    console.log(`✅ [GENERATE-INVITATION] Slug: ${instructor.slug}`);
 
     if (!instructor.invitationCodes) {
       instructor.invitationCodes = [];
@@ -476,7 +468,7 @@ router.post('/generate-invitation', authenticateToken, async (req, res) => {
     await instructor.save();
     console.log('✅ [GENERATE-INVITATION] Instrutor salvo com sucesso');
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = getFrontendUrl();
     const invitationLink = `${frontendUrl}/join-instructor/${instructor.slug}/${code}`;
 
     console.log(`✅ [GENERATE-INVITATION] Resposta enviada`);
@@ -489,8 +481,7 @@ router.post('/generate-invitation', authenticateToken, async (req, res) => {
       createdAt: new Date()
     });
   } catch (error) {
-    console.error('❌ [GENERATE-INVITATION] Erro ao gerar código:', error);
-    console.error('❌ [GENERATE-INVITATION] Stack:', error.stack);
+    console.error(`❌ [GENERATE-INVITATION] Erro: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -500,11 +491,11 @@ router.get('/invitation/:slug/:code', async (req, res) => {
   try {
     const { slug, code } = req.params;
 
-    console.log('🔍 [INVITATION] Validando slug:', slug, 'código:', code);
+    console.log(`🔍 [INVITATION] Validando slug: ${slug} | Código: ${code}`);
 
     const instructor = await Instructor.findOne({ slug });
     if (!instructor) {
-      console.log('❌ [INVITATION] Instrutor não encontrado com slug:', slug);
+      console.log(`❌ [INVITATION] Instrutor não encontrado: ${slug}`);
       return res.status(404).json({ error: 'Instrutor não encontrado' });
     }
 
@@ -520,7 +511,7 @@ router.get('/invitation/:slug/:code', async (req, res) => {
       return res.status(400).json({ error: 'Este código já foi utilizado' });
     }
 
-    console.log(`✅ [INVITATION] Código validado para instrutor ${instructor._id}`);
+    console.log(`✅ [INVITATION] Código validado - Instrutor: ${instructor._id}`);
     
     res.json({
       success: true,
@@ -529,7 +520,7 @@ router.get('/invitation/:slug/:code', async (req, res) => {
       instructorEmail: instructor.email
     });
   } catch (error) {
-    console.error('❌ [INVITATION] Erro ao validar código:', error.message);
+    console.error(`❌ [INVITATION] Erro ao validar código: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -540,10 +531,7 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
     const { slug, code } = req.body;
     const studentId = req.userId;
 
-    console.log('🎯 [ACCEPT-INVITATION] Iniciado');
-    console.log('   slug recebido:', slug);
-    console.log('   code:', code);
-    console.log('   studentId (token):', studentId);
+    console.log(`🎯 [ACCEPT-INVITATION] Iniciado - slug: ${slug} | code: ${code} | studentId: ${studentId}`);
 
     // Validações
     if (!slug || !code) {
@@ -554,27 +542,25 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
     // Verifica se o token pertence a um aluno real
     const student = await User.findById(studentId);
     if (!student) {
-      console.error('❌ [ACCEPT-INVITATION] Aluno (token) não encontrado na coleção Users:', studentId);
+      console.error(`❌ [ACCEPT-INVITATION] Aluno não encontrado: ${studentId}`);
       return res.status(401).json({ error: 'Aluno não autenticado corretamente' });
     }
-    console.log('✅ [ACCEPT-INVITATION] Aluno autenticado:', student.name);
+    console.log(`✅ [ACCEPT-INVITATION] Aluno autenticado: ${student.name}`);
 
     // DEBUG: Listar TODOS os instrutores e seus slugs
     console.log('🔍 [ACCEPT-INVITATION] Buscando todos os instrutores...');
     const allInstructors = await Instructor.find({}, { _id: 1, name: 1, slug: 1, email: 1 });
-    console.log('📋 [ACCEPT-INVITATION] Total de instrutores no banco:', allInstructors.length);
+    console.log(`📋 [ACCEPT-INVITATION] Total de instrutores: ${allInstructors.length}`);
     allInstructors.forEach(i => {
-      console.log(`   - ID: ${i._id} | Slug: "${i.slug}" | Nome: ${i.name} | Email: ${i.email}`);
+      console.log(`   - ID: ${i._id} | Slug: "${i.slug}" | Nome: ${i.name}`);
     });
 
     // Busca o instrutor pelo slug (EXATO)
-    console.log('🔍 [ACCEPT-INVITATION] Procurando instrutor com slug EXATO:', `"${slug}"`);
+    console.log(`🔍 [ACCEPT-INVITATION] Procurando instrutor com slug: "${slug}"`);
     const instructor = await Instructor.findOne({ slug: slug.trim() });
     
     if (!instructor) {
-      console.error('❌ [ACCEPT-INVITATION] Instrutor não encontrado com slug:', slug);
-      console.error('❌ [ACCEPT-INVITATION] Slugs disponíveis:');
-      allInstructors.forEach(i => console.error(`   - ${i.slug}`));
+      console.error(`❌ [ACCEPT-INVITATION] Instrutor não encontrado: ${slug}`);
       return res.status(404).json({ 
         error: 'Instrutor não encontrado',
         searchedSlug: slug,
@@ -582,17 +568,13 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
       });
     }
 
-    console.log('✅ [ACCEPT-INVITATION] Instrutor encontrado:', instructor.name, instructor._id);
+    console.log(`✅ [ACCEPT-INVITATION] Instrutor encontrado: ${instructor.name} (${instructor._id})`);
 
     // Busca o código de convite
     console.log('🔍 [ACCEPT-INVITATION] Procurando código de convite...');
     const invitation = instructor.invitationCodes.find(inv => inv.code === code);
     if (!invitation) {
       console.error('❌ [ACCEPT-INVITATION] Código de convite não encontrado');
-      console.log('   Códigos disponíveis para este instrutor:');
-      instructor.invitationCodes.forEach(inv => {
-        console.log(`   - ${inv.code} (usedBy: ${inv.usedBy || 'não usado'})`);
-      });
       return res.status(404).json({ error: 'Convite não encontrado' });
     }
 
@@ -601,9 +583,7 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
     // Verifica se expirou (30 dias)
     const now = new Date();
     const expiryDate = new Date(invitation.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
-    console.log('⏰ [ACCEPT-INVITATION] Data de criação:', invitation.createdAt);
-    console.log('⏰ [ACCEPT-INVITATION] Data de expiração:', expiryDate);
-    console.log('⏰ [ACCEPT-INVITATION] Data atual:', now);
+    console.log(`⏰ [ACCEPT-INVITATION] Expiração: ${expiryDate} | Agora: ${now}`);
     
     if (now > expiryDate) {
       console.error('❌ [ACCEPT-INVITATION] Convite expirado');
@@ -614,7 +594,7 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
 
     // Verifica se já foi usado
     if (invitation.usedBy) {
-      console.warn('⚠️  [ACCEPT-INVITATION] Convite já foi usado por:', invitation.usedBy);
+      console.warn(`⚠️  [ACCEPT-INVITATION] Convite já foi usado por: ${invitation.usedBy}`);
       return res.status(400).json({ error: 'Convite já foi utilizado' });
     }
 
@@ -636,12 +616,11 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
 
     // Linka o aluno ao instrutor
     instructor.studentsLinked.push(studentId);
-    console.log('✅ [ACCEPT-INVITATION] Aluno adicionado à lista (total agora:', instructor.studentsLinked.length, ')');
+    console.log(`✅ [ACCEPT-INVITATION] Aluno adicionado (total: ${instructor.studentsLinked.length})`);
 
     // Salva as mudanças
     await instructor.save();
     console.log('✅ [ACCEPT-INVITATION] Instrutor salvo com sucesso');
-    console.log('✅ [ACCEPT-INVITATION] ===== SUCESSO! =====');
 
     res.json({ 
       success: true, 
@@ -650,8 +629,7 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
       instructorId: instructor._id
     });
   } catch (error) {
-    console.error('❌ [ACCEPT-INVITATION] Erro:', error.message);
-    console.error('❌ [ACCEPT-INVITATION] Stack:', error.stack);
+    console.error(`❌ [ACCEPT-INVITATION] Erro: ${error.message}`);
     res.status(500).json({ error: 'Erro ao aceitar convite', details: error.message });
   }
 });
@@ -661,7 +639,7 @@ router.get('/my-invitations', authenticateToken, async (req, res) => {
   try {
     const instructorId = req.userId;
 
-    console.log('📋 [MY-INVITATIONS] Buscando convites do instrutor:', instructorId);
+    console.log(`📋 [MY-INVITATIONS] Buscando convites do instrutor: ${instructorId}`);
 
     const instructor = await Instructor.findById(instructorId);
     if (!instructor) {
@@ -671,7 +649,7 @@ router.get('/my-invitations', authenticateToken, async (req, res) => {
 
     const activeInvitations = instructor.invitationCodes.filter(inv => !inv.usedBy);
     
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = getFrontendUrl();
     const invitationsWithLinks = activeInvitations.map(inv => ({
       code: inv.code,
       createdAt: inv.createdAt,
@@ -686,7 +664,7 @@ router.get('/my-invitations', authenticateToken, async (req, res) => {
       invitations: invitationsWithLinks 
     });
   } catch (error) {
-    console.error('❌ [MY-INVITATIONS] Erro ao listar convites:', error.message);
+    console.error(`❌ [MY-INVITATIONS] Erro: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -697,8 +675,7 @@ router.post('/revoke-invitation/:code', authenticateToken, async (req, res) => {
     const { code } = req.params;
     const instructorId = req.userId;
 
-    console.log('🔄 [REVOKE-INVITATION] Revogando convite:', code);
-    console.log('🔄 [REVOKE-INVITATION] Instrutor:', instructorId);
+    console.log(`🔄 [REVOKE-INVITATION] Revogando convite: ${code} | Instrutor: ${instructorId}`);
 
     const instructor = await Instructor.findById(instructorId);
     if (!instructor) {
@@ -718,7 +695,7 @@ router.post('/revoke-invitation/:code', authenticateToken, async (req, res) => {
     console.log('✅ [REVOKE-INVITATION] Convite revogado com sucesso');
     res.json({ success: true, message: 'Convite removido com sucesso' });
   } catch (error) {
-    console.error('❌ [REVOKE-INVITATION] Erro:', error.message);
+    console.error(`❌ [REVOKE-INVITATION] Erro: ${error.message}`);
     res.status(500).json({ error: 'Erro ao revogar convite', details: error.message });
   }
 });
@@ -728,7 +705,7 @@ router.post('/clear-all-invitations', authenticateToken, async (req, res) => {
   try {
     const instructorId = req.userId;
 
-    console.log('🗑️ [CLEAR-ALL-INVITATIONS] Limpando todos os convites do instrutor:', instructorId);
+    console.log(`🗑️ [CLEAR-ALL-INVITATIONS] Limpando convites do instrutor: ${instructorId}`);
 
     const instructor = await Instructor.findById(instructorId);
     if (!instructor) {
@@ -743,7 +720,7 @@ router.post('/clear-all-invitations', authenticateToken, async (req, res) => {
     console.log(`✅ [CLEAR-ALL-INVITATIONS] ${totalBefore} convites removidos`);
     res.json({ success: true, message: 'Todos os convites foram removidos' });
   } catch (error) {
-    console.error('❌ [CLEAR-ALL-INVITATIONS] Erro:', error.message);
+    console.error(`❌ [CLEAR-ALL-INVITATIONS] Erro: ${error.message}`);
     res.status(500).json({ error: 'Erro ao limpar convites', details: error.message });
   }
 });
@@ -751,7 +728,7 @@ router.post('/clear-all-invitations', authenticateToken, async (req, res) => {
 // ========== DELETAR CONTA DO INSTRUTOR ==========
 router.delete('/delete-account', authenticateToken, async (req, res) => {
   try {
-    console.log('🗑️ [DELETE ACCOUNT] Deletando instrutor:', req.userId);
+    console.log(`🗑️ [DELETE ACCOUNT] Deletando instrutor: ${req.userId}`);
 
     await Evaluation.deleteMany({ instructorId: req.userId });
     console.log('📋 [DELETE ACCOUNT] Avaliações deletadas');
@@ -761,7 +738,7 @@ router.delete('/delete-account', authenticateToken, async (req, res) => {
 
     res.json({ message: 'Conta deletada com sucesso!' });
   } catch (err) {
-    console.error('❌ [DELETE ACCOUNT] Erro:', err);
+    console.error(`❌ [DELETE ACCOUNT] Erro: ${err.message}`);
     res.status(500).json({ message: 'Erro ao deletar a conta', error: err.message });
   }
 });
