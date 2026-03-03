@@ -15,10 +15,9 @@ app.get('/api', (req, res) => {
   res.json({ message: 'API ConduzAuto funcionando!' });
 });
 
-// Rotas
+// ✅ Rotas (removida a duplicação)
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/instructor', require('./routes/instructor'));
-app.use('/api/invites', require('./routes/invites')); // 🔴 NOVA ROTA
+app.use('/api/instructor', require('./routes/instructor')); // ✅ Contém /accept-invitation
 
 // Rota de teste
 app.get('/api/health', (req, res) => {

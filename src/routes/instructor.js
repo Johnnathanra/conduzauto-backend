@@ -7,8 +7,8 @@ const Instructor = require('../models/Instructor');
 const User = require('../models/User');
 const Evaluation = require('../models/Evaluation');
 
-// Middleware de autenticação
-const authenticateInstructor = (req, res, next) => {
+// ✅ Middleware de autenticação GERAL (aceita alunos E instrutores)
+const authenticateToken = (req, res, next) => {
   console.log('🔐 [AUTH] Middleware executado');
   console.log('🔐 [AUTH] Headers:', req.headers.authorization ? 'Presente' : 'Ausente');
   
@@ -23,7 +23,6 @@ const authenticateInstructor = (req, res, next) => {
   
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    // 🔴 CORRIGIDO: Sempre converter para string
     const userId = typeof decoded.id === 'string' ? decoded.id : decoded.id.toString();
     console.log('✅ [AUTH] Token válido, userId:', userId);
     
@@ -38,9 +37,9 @@ const authenticateInstructor = (req, res, next) => {
   }
 };
 
-const authenticateToken = authenticateInstructor;
+const authenticateInstructor = authenticateToken;
 
-// REGISTRO
+// ========== REGISTRO ==========
 router.post('/register', async (req, res) => {
   console.log('📝 [REGISTER] Requisição recebida:', req.body);
   try {
@@ -69,13 +68,28 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Email já cadastrado' });
     }
 
+    // ========== GERAR SLUG ÚNICO ==========
+    console.log('🔧 [REGISTER] Gerando slug para:', name);
+    const base = name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+    let slug = base;
+    let counter = 1;
+    while (await Instructor.findOne({ slug })) {
+      slug = `${base}-${counter}`;
+      counter++;
+    }
+    console.log('✅ [REGISTER] Slug gerado:', slug);
+
+    // ========== HASH PASSWORD ==========
+    console.log('🔐 [REGISTER] Hasheando password...');
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+    console.log('✅ [REGISTER] Password hasheada');
 
     const instructor = new Instructor({
       name,
       email,
       password: hashedPassword,
+      slug,
       bio: bio || '',
       studentsLinked: [],
       invitationCodes: []
@@ -83,9 +97,7 @@ router.post('/register', async (req, res) => {
 
     await instructor.save();
     console.log('✅ [REGISTER] Instructor salvo:', instructor._id);
-    console.log('✅ [REGISTER] Slug gerado:', instructor.slug);
 
-    // 🔴 CORRIGIDO: Converter ObjectId para string no token
     const token = jwt.sign({ id: instructor._id.toString() }, process.env.JWT_SECRET, {
       expiresIn: '72h',
     });
@@ -109,7 +121,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// LOGIN
+// ========== LOGIN ==========
 router.post('/login', async (req, res) => {
   console.log('🔐 [LOGIN] Tentativa de login');
   try {
@@ -129,7 +141,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }
 
-    // 🔴 CORRIGIDO: Converter ObjectId para string no token
     const token = jwt.sign({ id: instructor._id.toString() }, process.env.JWT_SECRET, {
       expiresIn: '72h',
     });
@@ -153,7 +164,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// OBTER PERFIL DO INSTRUTOR
+// ========== OBTER PERFIL DO INSTRUTOR ==========
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const instructor = await Instructor.findById(req.userId);
@@ -173,7 +184,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ PROCURAR ALUNOS
+// ========== PROCURAR ALUNOS ==========
 router.get('/search-students', authenticateToken, async (req, res) => {
   try {
     const { search } = req.query;
@@ -215,7 +226,7 @@ router.get('/search-students', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ VINCULAR ALUNO AO INSTRUTOR
+// ========== VINCULAR ALUNO AO INSTRUTOR ==========
 router.post('/link-student', authenticateToken, async (req, res) => {
   try {
     const { studentId } = req.body;
@@ -268,7 +279,7 @@ router.post('/link-student', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ DESVINCULAR ALUNO
+// ========== DESVINCULAR ALUNO ==========
 router.post('/unlink-student', authenticateToken, async (req, res) => {
   try {
     const { studentId } = req.body;
@@ -296,7 +307,7 @@ router.post('/unlink-student', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ OBTER ALUNOS VINCULADOS DO INSTRUTOR
+// ========== OBTER ALUNOS VINCULADOS DO INSTRUTOR ==========
 router.get('/my-students', authenticateToken, async (req, res) => {
   try {
     console.log('👥 [MY-STUDENTS] Buscando alunos do instrutor:', req.userId);
@@ -319,7 +330,7 @@ router.get('/my-students', authenticateToken, async (req, res) => {
   }
 });
 
-// OBTER TODOS OS ALUNOS
+// ========== OBTER TODOS OS ALUNOS ==========
 router.get('/students', authenticateToken, async (req, res) => {
   try {
     console.log('📋 [STUDENTS] Buscando todos os alunos');
@@ -336,7 +347,7 @@ router.get('/students', authenticateToken, async (req, res) => {
   }
 });
 
-// OBTER AVALIAÇÕES DE UM ALUNO
+// ========== OBTER AVALIAÇÕES DE UM ALUNO ==========
 router.get('/student/:studentId/evaluations', authenticateToken, async (req, res) => {
   try {
     const evaluations = await Evaluation.find({
@@ -350,7 +361,7 @@ router.get('/student/:studentId/evaluations', authenticateToken, async (req, res
   }
 });
 
-// CRIAR AVALIAÇÃO
+// ========== CRIAR AVALIAÇÃO ==========
 router.post('/evaluate', authenticateToken, async (req, res) => {
   try {
     const { studentId, courseLesson, rating, concept, feedback, improvementSuggestions } = req.body;
@@ -380,7 +391,7 @@ router.post('/evaluate', authenticateToken, async (req, res) => {
   }
 });
 
-// ATUALIZAR AVALIAÇÃO
+// ========== ATUALIZAR AVALIAÇÃO ==========
 router.put('/evaluate/:evaluationId', authenticateToken, async (req, res) => {
   try {
     const { rating, concept, feedback, improvementSuggestions } = req.body;
@@ -399,7 +410,7 @@ router.put('/evaluate/:evaluationId', authenticateToken, async (req, res) => {
   }
 });
 
-// DELETAR AVALIAÇÃO
+// ========== DELETAR AVALIAÇÃO ==========
 router.delete('/evaluate/:evaluationId', authenticateToken, async (req, res) => {
   try {
     await Evaluation.findByIdAndDelete(req.params.evaluationId);
@@ -412,9 +423,7 @@ router.delete('/evaluate/:evaluationId', authenticateToken, async (req, res) => 
   }
 });
 
-// ✅✅✅ ROTAS DE CONVITE ✅✅✅
-
-// ✅ GERAR CÓDIGO DE CONVITE
+// ========== GERAR CÓDIGO DE CONVITE ==========
 router.post('/generate-invitation', authenticateToken, async (req, res) => {
   try {
     console.log('🎫 [GENERATE-INVITATION] Requisição recebida');
@@ -437,6 +446,21 @@ router.post('/generate-invitation', authenticateToken, async (req, res) => {
     }
 
     console.log('✅ [GENERATE-INVITATION] Instrutor encontrado:', instructor.name);
+
+    // ========== GERAR SLUG SE AUSENTE ==========
+    if (!instructor.slug) {
+      console.log('⚠️  [GENERATE-INVITATION] Slug ausente, gerando...');
+      const base = instructor.name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+      let slug = base;
+      let counter = 1;
+      while (await Instructor.findOne({ slug })) {
+        slug = `${base}-${counter}`;
+        counter++;
+      }
+      instructor.slug = slug;
+      console.log('✅ [GENERATE-INVITATION] Slug gerado:', slug);
+    }
+
     console.log('✅ [GENERATE-INVITATION] Slug:', instructor.slug);
 
     if (!instructor.invitationCodes) {
@@ -471,7 +495,7 @@ router.post('/generate-invitation', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ VALIDAR E OBTER DADOS DO CONVITE
+// ========== VALIDAR E OBTER DADOS DO CONVITE ==========
 router.get('/invitation/:slug/:code', async (req, res) => {
   try {
     const { slug, code } = req.params;
@@ -510,60 +534,129 @@ router.get('/invitation/:slug/:code', async (req, res) => {
   }
 });
 
-// ✅ ALUNO ACEITA O CONVITE
+// ========== ALUNO ACEITA O CONVITE ==========
 router.post('/accept-invitation', authenticateToken, async (req, res) => {
   try {
     const { slug, code } = req.body;
     const studentId = req.userId;
 
+    console.log('🎯 [ACCEPT-INVITATION] Iniciado');
+    console.log('   slug recebido:', slug);
+    console.log('   code:', code);
+    console.log('   studentId (token):', studentId);
+
+    // Validações
     if (!slug || !code) {
-      return res.status(400).json({ error: 'Slug e código são obrigatórios' });
+      console.error('❌ [ACCEPT-INVITATION] Slug ou code ausentes');
+      return res.status(400).json({ error: 'Slug e code são obrigatórios' });
     }
 
-    console.log('🎯 [ACCEPT-INVITATION] Aluno:', studentId, 'slug:', slug, 'código:', code);
+    // Verifica se o token pertence a um aluno real
+    const student = await User.findById(studentId);
+    if (!student) {
+      console.error('❌ [ACCEPT-INVITATION] Aluno (token) não encontrado na coleção Users:', studentId);
+      return res.status(401).json({ error: 'Aluno não autenticado corretamente' });
+    }
+    console.log('✅ [ACCEPT-INVITATION] Aluno autenticado:', student.name);
 
-    const instructor = await Instructor.findOne({ slug });
+    // DEBUG: Listar TODOS os instrutores e seus slugs
+    console.log('🔍 [ACCEPT-INVITATION] Buscando todos os instrutores...');
+    const allInstructors = await Instructor.find({}, { _id: 1, name: 1, slug: 1, email: 1 });
+    console.log('📋 [ACCEPT-INVITATION] Total de instrutores no banco:', allInstructors.length);
+    allInstructors.forEach(i => {
+      console.log(`   - ID: ${i._id} | Slug: "${i.slug}" | Nome: ${i.name} | Email: ${i.email}`);
+    });
+
+    // Busca o instrutor pelo slug (EXATO)
+    console.log('🔍 [ACCEPT-INVITATION] Procurando instrutor com slug EXATO:', `"${slug}"`);
+    const instructor = await Instructor.findOne({ slug: slug.trim() });
+    
     if (!instructor) {
-      console.log('❌ [ACCEPT-INVITATION] Instrutor não encontrado');
-      return res.status(404).json({ error: 'Instrutor não encontrado' });
+      console.error('❌ [ACCEPT-INVITATION] Instrutor não encontrado com slug:', slug);
+      console.error('❌ [ACCEPT-INVITATION] Slugs disponíveis:');
+      allInstructors.forEach(i => console.error(`   - ${i.slug}`));
+      return res.status(404).json({ 
+        error: 'Instrutor não encontrado',
+        searchedSlug: slug,
+        availableSlugs: allInstructors.map(i => i.slug)
+      });
     }
 
+    console.log('✅ [ACCEPT-INVITATION] Instrutor encontrado:', instructor.name, instructor._id);
+
+    // Busca o código de convite
+    console.log('🔍 [ACCEPT-INVITATION] Procurando código de convite...');
     const invitation = instructor.invitationCodes.find(inv => inv.code === code);
-    
     if (!invitation) {
-      console.log('❌ [ACCEPT-INVITATION] Código inválido');
-      return res.status(404).json({ error: 'Código de convite inválido' });
-    }
-    
-    if (invitation.usedBy) {
-      console.log('❌ [ACCEPT-INVITATION] Código já foi utilizado');
-      return res.status(400).json({ error: 'Este código já foi utilizado' });
+      console.error('❌ [ACCEPT-INVITATION] Código de convite não encontrado');
+      console.log('   Códigos disponíveis para este instrutor:');
+      instructor.invitationCodes.forEach(inv => {
+        console.log(`   - ${inv.code} (usedBy: ${inv.usedBy || 'não usado'})`);
+      });
+      return res.status(404).json({ error: 'Convite não encontrado' });
     }
 
-    const isAlreadyLinked = instructor.studentsLinked.some(id => id.toString() === studentId.toString());
+    console.log('✅ [ACCEPT-INVITATION] Convite encontrado');
+
+    // Verifica se expirou (30 dias)
+    const now = new Date();
+    const expiryDate = new Date(invitation.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+    console.log('⏰ [ACCEPT-INVITATION] Data de criação:', invitation.createdAt);
+    console.log('⏰ [ACCEPT-INVITATION] Data de expiração:', expiryDate);
+    console.log('⏰ [ACCEPT-INVITATION] Data atual:', now);
+    
+    if (now > expiryDate) {
+      console.error('❌ [ACCEPT-INVITATION] Convite expirado');
+      return res.status(400).json({ error: 'Convite expirado' });
+    }
+
+    console.log('✅ [ACCEPT-INVITATION] Convite válido e não expirado');
+
+    // Verifica se já foi usado
+    if (invitation.usedBy) {
+      console.warn('⚠️  [ACCEPT-INVITATION] Convite já foi usado por:', invitation.usedBy);
+      return res.status(400).json({ error: 'Convite já foi utilizado' });
+    }
+
+    console.log('✅ [ACCEPT-INVITATION] Convite ainda não foi usado');
+
+    // Verifica se aluno já está linkado
+    const studentIdStr = studentId.toString();
+    const isAlreadyLinked = instructor.studentsLinked.some(id => id.toString() === studentIdStr);
     if (isAlreadyLinked) {
-      console.log('❌ [ACCEPT-INVITATION] Aluno já está vinculado');
+      console.warn('⚠️  [ACCEPT-INVITATION] Aluno já estava linkado');
       return res.status(400).json({ error: 'Você já está vinculado a este instrutor' });
     }
 
-    instructor.studentsLinked.push(studentId);
-    invitation.usedBy = studentId;
-    await instructor.save();
+    console.log('✅ [ACCEPT-INVITATION] Aluno não está linkado ainda');
 
-    console.log(`✅ [ACCEPT-INVITATION] Aluno ${studentId} aceita convite`);
-    
+    // Marca como usado
+    invitation.usedBy = studentId;
+    console.log('✅ [ACCEPT-INVITATION] Marcando convite como usado');
+
+    // Linka o aluno ao instrutor
+    instructor.studentsLinked.push(studentId);
+    console.log('✅ [ACCEPT-INVITATION] Aluno adicionado à lista (total agora:', instructor.studentsLinked.length, ')');
+
+    // Salva as mudanças
+    await instructor.save();
+    console.log('✅ [ACCEPT-INVITATION] Instrutor salvo com sucesso');
+    console.log('✅ [ACCEPT-INVITATION] ===== SUCESSO! =====');
+
     res.json({ 
       success: true, 
       message: 'Convite aceito com sucesso!',
-      instructorName: instructor.name
+      instructorName: instructor.name,
+      instructorId: instructor._id
     });
   } catch (error) {
-    console.error('❌ [ACCEPT-INVITATION] Erro ao aceitar convite:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error('❌ [ACCEPT-INVITATION] Erro:', error.message);
+    console.error('❌ [ACCEPT-INVITATION] Stack:', error.stack);
+    res.status(500).json({ error: 'Erro ao aceitar convite', details: error.message });
   }
 });
 
-// ✅ LISTAR CONVITES ATIVOS DO INSTRUTOR
+// ========== LISTAR CONVITES ATIVOS DO INSTRUTOR ==========
 router.get('/my-invitations', authenticateToken, async (req, res) => {
   try {
     const instructorId = req.userId;
@@ -598,7 +691,64 @@ router.get('/my-invitations', authenticateToken, async (req, res) => {
   }
 });
 
-// DELETAR CONTA DO INSTRUTOR
+// ========== REVOGAR UM CONVITE ESPECÍFICO ==========
+router.post('/revoke-invitation/:code', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const instructorId = req.userId;
+
+    console.log('🔄 [REVOKE-INVITATION] Revogando convite:', code);
+    console.log('🔄 [REVOKE-INVITATION] Instrutor:', instructorId);
+
+    const instructor = await Instructor.findById(instructorId);
+    if (!instructor) {
+      console.error('❌ [REVOKE-INVITATION] Instrutor não encontrado');
+      return res.status(404).json({ error: 'Instrutor não encontrado' });
+    }
+
+    const invitation = instructor.invitationCodes.find(inv => inv.code === code);
+    if (!invitation) {
+      console.error('❌ [REVOKE-INVITATION] Convite não encontrado');
+      return res.status(404).json({ error: 'Convite não encontrado' });
+    }
+
+    instructor.invitationCodes = instructor.invitationCodes.filter(inv => inv.code !== code);
+    await instructor.save();
+
+    console.log('✅ [REVOKE-INVITATION] Convite revogado com sucesso');
+    res.json({ success: true, message: 'Convite removido com sucesso' });
+  } catch (error) {
+    console.error('❌ [REVOKE-INVITATION] Erro:', error.message);
+    res.status(500).json({ error: 'Erro ao revogar convite', details: error.message });
+  }
+});
+
+// ========== LIMPAR TODOS OS CONVITES ==========
+router.post('/clear-all-invitations', authenticateToken, async (req, res) => {
+  try {
+    const instructorId = req.userId;
+
+    console.log('🗑️ [CLEAR-ALL-INVITATIONS] Limpando todos os convites do instrutor:', instructorId);
+
+    const instructor = await Instructor.findById(instructorId);
+    if (!instructor) {
+      console.error('❌ [CLEAR-ALL-INVITATIONS] Instrutor não encontrado');
+      return res.status(404).json({ error: 'Instrutor não encontrado' });
+    }
+
+    const totalBefore = instructor.invitationCodes.length;
+    instructor.invitationCodes = [];
+    await instructor.save();
+
+    console.log(`✅ [CLEAR-ALL-INVITATIONS] ${totalBefore} convites removidos`);
+    res.json({ success: true, message: 'Todos os convites foram removidos' });
+  } catch (error) {
+    console.error('❌ [CLEAR-ALL-INVITATIONS] Erro:', error.message);
+    res.status(500).json({ error: 'Erro ao limpar convites', details: error.message });
+  }
+});
+
+// ========== DELETAR CONTA DO INSTRUTOR ==========
 router.delete('/delete-account', authenticateToken, async (req, res) => {
   try {
     console.log('🗑️ [DELETE ACCOUNT] Deletando instrutor:', req.userId);
