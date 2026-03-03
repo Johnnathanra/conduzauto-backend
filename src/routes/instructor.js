@@ -618,6 +618,14 @@ router.post('/accept-invitation', authenticateToken, async (req, res) => {
     instructor.studentsLinked.push(studentId);
     console.log(`✅ [ACCEPT-INVITATION] Aluno adicionado (total: ${instructor.studentsLinked.length})`);
 
+    // ========== SALVA DADOS DO INSTRUTOR NO ALUNO ==========
+    student.instructorId = instructor._id;
+    student.instructorName = instructor.name;
+    student.instructorEmail = instructor.email;
+    await student.save();
+    console.log(`✅ [ACCEPT-INVITATION] Dados do instrutor salvos no aluno: ${student.name}`);
+    // =========================================================
+
     // Salva as mudanças
     await instructor.save();
     console.log('✅ [ACCEPT-INVITATION] Instrutor salvo com sucesso');
@@ -722,6 +730,54 @@ router.post('/clear-all-invitations', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error(`❌ [CLEAR-ALL-INVITATIONS] Erro: ${error.message}`);
     res.status(500).json({ error: 'Erro ao limpar convites', details: error.message });
+  }
+});
+
+// ========== REMOVER INSTRUTOR DO ALUNO ==========
+router.post('/remove-instructor', authenticateToken, async (req, res) => {
+  try {
+    const studentId = req.userId;
+
+    console.log(`🔓 [REMOVE-INSTRUCTOR] Aluno: ${studentId} removendo instrutor`);
+
+    const student = await User.findById(studentId);
+    if (!student) {
+      console.log('❌ [REMOVE-INSTRUCTOR] Aluno não encontrado');
+      return res.status(404).json({ error: 'Aluno não encontrado' });
+    }
+
+    if (!student.instructorId) {
+      console.log('❌ [REMOVE-INSTRUCTOR] Aluno não tem instrutor vinculado');
+      return res.status(400).json({ error: 'Você não tem um instrutor vinculado' });
+    }
+
+    const instructorId = student.instructorId;
+    console.log(`✅ [REMOVE-INSTRUCTOR] Instrutor encontrado: ${student.instructorName}`);
+
+    // Remove aluno da lista de alunos do instrutor
+    const instructor = await Instructor.findById(instructorId);
+    if (instructor) {
+      instructor.studentsLinked = instructor.studentsLinked.filter(
+        id => id.toString() !== studentId.toString()
+      );
+      await instructor.save();
+      console.log('✅ [REMOVE-INSTRUCTOR] Aluno removido da lista do instrutor');
+    }
+
+    // Remove instrutor do aluno
+    student.instructorId = null;
+    student.instructorName = null;
+    student.instructorEmail = null;
+    await student.save();
+
+    console.log('✅ [REMOVE-INSTRUCTOR] Instrutor removido do aluno com sucesso');
+    res.json({ 
+      success: true, 
+      message: 'Instrutor removido com sucesso!' 
+    });
+  } catch (error) {
+    console.error(`❌ [REMOVE-INSTRUCTOR] Erro: ${error.message}`);
+    res.status(500).json({ error: 'Erro ao remover instrutor', details: error.message });
   }
 });
 
